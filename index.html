@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Viewer Input</title>
+</head>
+<body>
+    <input type="number" id="viewer_count" placeholder="Number of viewers">
+    <button onclick="generateUrls()">Generate URLs</button>
+    <div id="urls"></div>
+    <script>
+        function generateUrls() {
+            var count = document.getElementById('viewer_count').value;
+            var urlsDiv = document.getElementById('urls');
+            urlsDiv.innerHTML = '';
+            for (var i = 0; i < count; i++) {
+                var url = window.location.href + 'viewer/' + i;
+                urlsDiv.innerHTML += '<a href="' + url + '" target="_blank">Viewer ' + i + '</a><br>';
+            }
+
+            // Send the number of viewers to the server
+            fetch('/set_viewers/' + count)
+                .then(response => response.json())
+                .then(data => console.log(data.message))
+                .catch(error => console.error('Error setting viewers:', error));
+        }
+    </script>
+</body>
+</html>
