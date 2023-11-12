@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Card Game</title>
+    <style>
+        .card-container {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .card {
+            display: inline-block;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 10px;
+            font-size: 30px;
+            background-color: #f9f9f9;
+            cursor: grab; /* Indicate that the card is draggable */
+        }
+        .viewer-section {
+            margin-bottom: 20px;
+        }
+        .grid {
+            width: 100px;
+            height: 140px;
+            border: 2px dashed #666;
+            display: inline-block;
+            margin: 5px;
+            vertical-align: top; /* Align with cards */
+        }
+    </style>
+</head>
+<body>
+    <h1>Welcome to the Card Game</h1>
+    <div id="roundDisplay">Current Round: 0</div>
+    <button id="getCardButton" onclick="getNewCard()">Get Card</button>
+    <button id="nextRoundButton" onclick="nextRound()">Next Round</button>
+    <div id="allCardsContainer" class="viewer-section">
+        <div class="card-container"></div>
+    </div>
+
+    <script>
+        var viewerId = window.location.pathname.split('/').pop();
+        var displayCards = []; // Store the display cards for the viewer
+        var gridContents = {}; // Object to store contents of each grid
+
+        function fetchAndDisplayAllCards() {
+            fetch('/get_all_cards')
+                .then(response => response.json())
+                .then(allCards => {
+                    displayCards = allCards[viewerId] ? allCards[viewerId].slice() : [];
+                    updateDisplayAndGrids(allCards);
+                })
+                .catch(error => {
+                    console.error('Error fetching all cards:', error);
+                });
+        }
+
+        function updateDisplayAndGrids(allCards) {
+            var allCardsContainer = document.getElementById('allCardsContainer');
+            allCardsContainer.innerHTML = '';
+
+            for (var viewer in allCards) {
+                var viewerSection = document.createElement('div');
+                viewerSection.className = 'viewer-section viewer-' + viewer;
+                viewerSection.innerHTML = '<strong>Viewer ' + viewer + ':</strong> ';
+
+                var viewerCards = document.createElement('div');
+                viewerCards.className = 'card-container';
+                viewerSection.appendChild(viewerCards);
+                allCardsContainer.appendChild(viewerSection);
+
+                allCards[viewer].forEach(function(card, index) {
+                    var cardDiv = document.createElement('div');
+                    cardDiv.className = 'card';
+                    cardDiv.textContent = card;
+
+                    if (viewer === viewerId) {
+                        if (!gridContents['grid-' + viewerId + '-' + index]) {
+                            cardDiv.draggable = true;
+                            cardDiv.id = 'card-' + viewer + '-' + index;
+                            cardDiv.addEventListener('dragstart', dragStart);
+                            viewerCards.appendChild(cardDiv);
+                        }
+                    } else {
+                        cardDiv.draggable = false;
+                        viewerCards.appendChild(cardDiv);
+                    }
+                });
+
+                if (viewer === viewerId) {
+                    createGridsForViewer(viewerSection);
+                }
+            }
+        }
+
+        function createGridsForViewer(viewerSection) {
+            Object.keys(gridContents).forEach(gridId => {
+                var gridDiv = document.getElementById(gridId) || document.createElement('div');
+                gridDiv.className = 'grid';
+                gridDiv.id = gridId;
+                gridDiv.innerHTML = ''; // Clear existing contents
+
+                var cardValue = gridContents[gridId];
+                var cardDiv = document.createElement('div');
+                cardDiv.className = 'card';
+                cardDiv.textContent = cardValue;
+                cardDiv.draggable = true;
+                cardDiv.addEventListener('dragstart', dragStartFromGrid);
+
+                gridDiv.appendChild(cardDiv);
+                gridDiv.addEventListener('dragover', allowDrop);
+                gridDiv.addEventListener('drop', dropCard);
+                viewerSection.appendChild(gridDiv);
+            });
+        }
+
+        function dragStart(event) {
+            event.dataTransfer.setData('text/plain', event.target.id);
+            event.dataTransfer.effectAllowed = 'move';
+        }
+
+        function allowDrop(event) {
+            event.preventDefault();
+        }
+
+        function dropCard(event) {
+            event.preventDefault();
+            var data = event.dataTransfer.getData('text');
+            var draggedElement = document.getElementById(data);
+            if (event.target.className === 'grid' && !event.target.hasChildNodes() && draggedElement) {
+                var cardValue = draggedElement.textContent;
+                var gridId = event.target.id;
+
+                displayCards = displayCards.filter(card => card !== cardValue); // Remove card from display array
+                gridContents[gridId] = cardValue; // Add card to grid contents
+
+                updateOriginalCardsDisplay();
+                updateGridDisplay(gridId, cardValue);
+
+                draggedElement.remove();
+            }
+        }
+
+        function updateOriginalCardsDisplay() {
+            var viewerCardsContainer = document.querySelector('.card-container');
+            viewerCardsContainer.innerHTML = '';
+
+            displayCards.forEach(function(card, index) {
+                var cardDiv = document.createElement('div');
+                cardDiv.className = 'card';
+                cardDiv.textContent = card;
+                cardDiv.draggable = true;
+                cardDiv.id = 'card-' + viewerId + '-' + index;
+                cardDiv.addEventListener('dragstart', dragStart);
+                viewerCardsContainer.appendChild(cardDiv);
+            });
+        }
+
+        function updateGridDisplay(gridId, cardValue) {
+            var grid = document.getElementById(gridId);
+            var cardCopy = document.createElement('div');
+            cardCopy.className = 'card';
+            cardCopy.textContent = cardValue;
+            cardCopy.draggable = true;
+            cardCopy.addEventListener('dragstart', dragStartFromGrid);
+            grid.appendChild(cardCopy);
+        }
+
+        function dragStartFromGrid(event) {
+            // Logic for dragging a card from a grid
+            event.dataTransfer.setData('text/plain', event.target.parentElement.id);
+            event.dataTransfer.effectAllowed = 'move'; 
+            event.target.classList.add('dragging');
+        }
+
+        // Functions for getNewCard, nextRound, updateRound
+
+        // Function to handle getting a new card
+function getNewCard() {
+    fetch('/get_card/' + viewerId)
+        .then(response => response.json())
+        .then(cards => {
+            if (cards.error) {
+                alert(cards.error);
+            } else {
+                // Assuming 'cards' is an array of new cards
+                displayCards.push(...cards); // Add new cards to the display array
+                updateOriginalCardsDisplay(); // Refresh the display
+            }
+        })
+        .catch(error => console.error('Error getting new card:', error));
+}
+
+// Function to advance to the next round
+function nextRound() {
+    fetch('/next_round')
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                alert(data.error);
+            } else {
+                updateRound(); // Refresh the round information
+            }
+        })
+        .catch(error => console.error('Error advancing to next round:', error));
+}
+
+// Function to update the current round information
+function updateRound() {
+    fetch('/get_round')
+        .then(response => response.json())
+        .then(data => {
+            var roundNumber = data.current_round;
+            document.getElementById('roundDisplay').textContent = 'Current Round: ' + roundNumber;
+
+            // Control button visibility based on the viewer's turn
+            var isViewersTurn = roundNumber.toString() === viewerId;
+            document.getElementById('getCardButton').style.display = isViewersTurn ? 'block' : 'none';
+            document.getElementById('nextRoundButton').style.display = isViewersTurn ? 'block' : 'none';
+        })
+        .catch(error => console.error('Error fetching round:', error));
+}
+
+
+        setInterval(fetchAndDisplayAllCards, 100); // Adjust interval as needed
+
+    </script>
+</body>
+</html>
